@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#394032" />
+  <title>我家的廚房</title>
+  <style>
+    html, body { margin: 0; padding: 0; background: #E8F1CF; min-height: 100%; }
+    #root { min-height: 100vh; }
+  </style>
+
+  <!-- Firebase(雲端資料庫,讓全家同步) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+
+  <!-- React + 在瀏覽器即時編譯 JSX 的 Babel -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel" data-presets="react">
+const { useState, useEffect } = React;
+
+/* ===========================================================
+   ↓↓↓  把這裡換成「你自己的」Firebase 設定(步驟見對話說明) ↓↓↓
+   =========================================================== */
+const firebaseConfig = {
+  apiKey: "AIzaSyDplp74lY0mqReYIvvp2s_REg3TycxCFLc",
+  authDomain: "my-kitchen-161b9.firebaseapp.com",
+  projectId: "my-kitchen-161b9",
+  storageBucket: "my-kitchen-161b9.firebasestorage.app",
+  messagingSenderId: "786627926202",
+  appId: "1:786627926202:web:0e501b5c8e1478aaebca83",
+  measurementId: "G-HWMN84SVJP",
+};
+/* ===========================================================
+   ↑↑↑  以上六行換成你的設定後就完成了  ↑↑↑
+   =========================================================== */
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// 以內嵌 SVG 取代 lucide-react 圖示(外觀不變)
+const IconBase = ({ size = 24, strokeWidth = 2, color = "currentColor", children, ...p }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" {...p}>{children}</svg>
+);
+const Plus = (p) => <IconBase {...p}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></IconBase>;
+const X = (p) => <IconBase {...p}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></IconBase>;
+const Check = (p) => <IconBase {...p}><polyline points="20 6 9 17 4 12"/></IconBase>;
+const Trash2 = (p) => <IconBase {...p}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></IconBase>;
+const ShoppingCart = (p) => <IconBase {...p}><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></IconBase>;
+const Package = (p) => <IconBase {...p}><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></IconBase>;
+const UtensilsCrossed = (p) => <IconBase {...p}><path d="M3 2v7c0 1.1.9 2 2 2a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></IconBase>;
+const AlertTriangle = (p) => <IconBase {...p}><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></IconBase>;
+const Pencil = (p) => <IconBase {...p}><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></IconBase>;
+const ArrowRight = (p) => <IconBase {...p}><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></IconBase>;
+
+const CATS = [
+  { id: "veg", label: "蔬菜", emoji: "🥬", color: "#6E8650" },
+  { id: "meat", label: "肉類", emoji: "🥩", color: "#C9503A" },
+  { id: "sea", label: "海鮮", emoji: "🦐", color: "#3C7C8A" },
+  { id: "egg", label: "蛋奶", emoji: "🥚", color: "#C99A22" },
+  { id: "stap", label: "主食", emoji: "🍚", color: "#B07D3A" },
+  { id: "sauce", label: "調味", emoji: "🧂", color: "#9A6FB0" },
+  { id: "etc", label: "其他", emoji: "🧺", color: "#7A6A5C" },
+];
+
+const todayStr = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+const fmtDate = (s) => {
+  const [y, m, d] = s.split("-").map(Number);
+  const wd = ["日", "一", "二", "三", "四", "五", "六"][new Date(y, m - 1, d).getDay()];
+  return `${m}月${d}日 · 週${wd}`;
+};
+const shortDate = (s) => { const [, m, d] = s.split("-").map(Number); return `${String(m).padStart(2,"0")}.${String(d).padStart(2,"0")}`; };
+const daysLeft = (exp) => {
+  if (!exp) return null;
+  const t = new Date(todayStr()).getTime();
+  const e = new Date(exp).getTime();
+  return Math.round((e - t) / 86400000);
+};
+const uid = () => Math.random().toString(36).slice(2, 9);
+const greet = () => { const h = new Date().getHours(); return h < 11 ? "早安" : h < 17 ? "午安" : "晚安"; };
+
+// 把 "1 顆" 拆成 { num:1, unit:"顆" };無法判讀數字時 num 為 null
+const parseAmount = (q) => {
+  const m = (q || "").match(/^\s*([\d.]+)\s*(.*)$/);
+  if (m && !isNaN(parseFloat(m[1]))) return { num: parseFloat(m[1]), unit: m[2].trim() };
+  return { num: null, unit: (q || "").trim() };
+};
+const fmtNum = (n) => String(Math.round(n * 100) / 100);
+const dishName = (d) => (typeof d === "string" ? d : d.name);
+const dishUses = (d) => (typeof d === "string" ? [] : (d.uses || []));
+
+// 依使用食材分類做營養評分
+const PROTEIN = new Set(["meat", "sea", "egg"]);
+const nutrition = (dishes) => {
+  const cats = new Set();
+  let count = 0;
+  dishes.forEach((d) => dishUses(d).forEach((u) => { if (u.cat) { cats.add(u.cat); count++; } }));
+  if (count === 0) return null;
+  const hasVeg = cats.has("veg");
+  const hasProt = [...cats].some((c) => PROTEIN.has(c));
+  const hasStap = cats.has("stap");
+  let score = 22;
+  if (hasVeg) score += 28;
+  if (hasProt) score += 28;
+  if (hasStap) score += 14;
+  score += Math.min(8, Math.max(0, cats.size - 1) * 3);
+  score = Math.min(100, Math.round(score));
+  const grade = score >= 88 ? "A" : score >= 72 ? "B" : score >= 56 ? "C" : "D";
+  const verdict = score >= 88 ? "營養相當均衡,很棒" : score >= 72 ? "整體不錯" : score >= 56 ? "尚可" : "菜色偏單一";
+  const tips = [];
+  if (!hasVeg) tips.push("加點蔬菜更均衡");
+  if (!hasProt) tips.push("補充蛋白質(肉/魚/蛋)更有飽足感");
+  if (!hasStap) tips.push("配點主食補充能量");
+  const comment = tips.length ? `${verdict},${tips.join("、")}。` : `${verdict},三大類都有了 👍`;
+  return { score, grade, comment, hasVeg, hasProt, hasStap };
+};
+const gradeColor = (g) => ({ A: "#4F7A4A", B: "#7C9E6B", C: "#C9A22A", D: "#C0612A" }[g] || "#7C9E6B");
+
+// ----- 概略營養估算(每 100 克近似值,kcal / 蛋白質 / 碳水 / 脂肪 克)-----
+const FOODDB = [
+  { k: ["雞胸"], kcal: 165, p: 31, c: 0, f: 3.6 },
+  { k: ["雞腿", "雞肉", "雞"], kcal: 209, p: 26, c: 0, f: 11 },
+  { k: ["五花", "培根"], kcal: 380, p: 14, c: 0, f: 35 },
+  { k: ["豬", "里肌"], kcal: 242, p: 27, c: 0, f: 14 },
+  { k: ["牛"], kcal: 250, p: 26, c: 0, f: 15 },
+  { k: ["鮭魚"], kcal: 208, p: 20, c: 0, f: 13 },
+  { k: ["魚", "鱈", "鯛"], kcal: 120, p: 22, c: 0, f: 3 },
+  { k: ["蝦"], kcal: 99, p: 24, c: 0, f: 0.3 },
+  { k: ["蛤", "蚌", "花枝", "魷", "貝"], kcal: 90, p: 16, c: 3, f: 1 },
+  { k: ["蛋"], kcal: 155, p: 13, c: 1.1, f: 11 },
+  { k: ["豆腐", "豆乾", "豆製"], kcal: 80, p: 8, c: 2, f: 5 },
+  { k: ["白飯", "米飯", "飯", "米"], kcal: 130, p: 2.7, c: 28, f: 0.3 },
+  { k: ["義大利麵", "義麵", "麵條", "麵"], kcal: 158, p: 6, c: 31, f: 1 },
+  { k: ["馬鈴薯", "薯", "地瓜"], kcal: 86, p: 1.6, c: 20, f: 0.1 },
+  { k: ["高麗菜", "包心菜"], kcal: 25, p: 1.3, c: 6, f: 0.1 },
+  { k: ["花椰菜", "青花", "西蘭花"], kcal: 34, p: 2.8, c: 7, f: 0.4 },
+  { k: ["番茄", "蕃茄", "西紅柿"], kcal: 18, p: 0.9, c: 3.9, f: 0.2 },
+  { k: ["紅蘿蔔", "胡蘿蔔", "蘿蔔"], kcal: 41, p: 0.9, c: 10, f: 0.2 },
+  { k: ["洋蔥"], kcal: 40, p: 1.1, c: 9, f: 0.1 },
+  { k: ["菇", "香菇", "金針"], kcal: 22, p: 3.1, c: 3.3, f: 0.3 },
+  { k: ["菜", "青菜", "菠菜", "蔥", "蒜", "薑"], kcal: 25, p: 2.2, c: 4, f: 0.4 },
+  { k: ["油"], kcal: 884, p: 0, c: 0, f: 100 },
+];
+// 找不到名稱時,用分類的概略每 100 克值
+const CATDB = {
+  veg: { kcal: 30, p: 2, c: 5, f: 0.3 }, meat: { kcal: 240, p: 26, c: 0, f: 15 },
+  sea: { kcal: 110, p: 20, c: 1, f: 2 }, egg: { kcal: 155, p: 13, c: 1, f: 11 },
+  stap: { kcal: 140, p: 4, c: 30, f: 0.5 }, sauce: { kcal: 120, p: 1, c: 8, f: 8 },
+  etc: { kcal: 90, p: 3, c: 12, f: 2 },
+};
+const UNITG = { g: 1, "克": 1, "公克": 1, kg: 1000, "公斤": 1000, "台斤": 600, "兩": 37.5 };
+const gramsOf = (u) => {
+  const amt = u.amount > 0 ? u.amount : 1;          // 沒填數量 → 當作 1 份
+  const unit = (u.unit || "").trim();
+  if (UNITG[unit]) return amt * UNITG[unit];
+  return amt * 100;                                  // 顆/個/份/包等 → 概略每份 100g
+};
+const estimateNutrients = (dishes) => {
+  let kcal = 0, p = 0, c = 0, f = 0, n = 0;
+  dishes.forEach((d) => dishUses(d).forEach((u) => {
+    const db = FOODDB.find((x) => x.k.some((k) => (u.name || "").includes(k))) || CATDB[u.cat] || CATDB.etc;
+    const r = gramsOf(u) / 100;
+    kcal += db.kcal * r; p += db.p * r; c += db.c * r; f += db.f * r; n++;
+  }));
+  if (n === 0) return null;
+  return { kcal: Math.round(kcal), p: Math.round(p), c: Math.round(c), f: Math.round(f) };
+};
+
+const CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=Noto+Serif+TC:wght@500;700;900&family=Noto+Sans+TC:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap');
+.kit * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+.kit {
+  --paper:#E8F1CF; --ink:#1E2019; --soft:#6F7B60; --line:#D2DEBA;
+  --pine:#587B7F; --pine-d:#496A6E; --olive:#7C9E6B; --lime:#CFEE9E;
+  --char:#394032; --card:#FFFFFF;
+  --shadow:0 1px 2px rgba(30,32,25,.04), 0 8px 24px -12px rgba(57,64,50,.28);
+  font-family:'Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif;
+  color:var(--ink); min-height:100vh; max-width:480px; margin:0 auto; position:relative;
+  background:
+    radial-gradient(120% 75% at 82% -8%, rgba(124,158,107,.28), transparent 58%),
+    radial-gradient(95% 55% at -12% 6%, rgba(207,238,158,.40), transparent 52%),
+    var(--paper);
+}
+.kit::before{
+  content:''; position:absolute; inset:0; z-index:0; pointer-events:none; opacity:.05;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.kit > * { position:relative; z-index:1; }
+.kit .serif { font-family:'Fraunces','Noto Serif TC','Songti TC',serif; }
+.kit .mono { font-family:'DM Mono','SFMono-Regular','Menlo',monospace; }
+.kit .kicker { font-family:'DM Mono',monospace; font-size:10.5px; letter-spacing:.22em; text-transform:uppercase; }
+
+/* ---- masthead ---- */
+.kit .head {
+  background:linear-gradient(168deg,#404835 0%,#2C3127 100%);
+  color:#EFF3E4; padding:24px 22px 22px; position:relative; overflow:hidden;
+  border-bottom-left-radius:26px; border-bottom-right-radius:26px;
+  box-shadow:0 14px 30px -18px rgba(44,49,39,.7);
+}
+.kit .head::after{ content:''; position:absolute; right:-40px; top:-50px; width:160px; height:160px; border-radius:50%;
+  background:radial-gradient(circle, rgba(207,238,158,.22), transparent 70%); }
+.kit .head .top { display:flex; justify-content:space-between; align-items:center; opacity:.72; margin-bottom:18px; }
+.kit .head .top .dot { width:5px; height:5px; border-radius:50%; background:var(--lime); display:inline-block; margin-right:7px; vertical-align:middle; }
+.kit .head h1 { font-size:30px; line-height:1.18; margin:0; font-weight:700; letter-spacing:.5px; }
+.kit .head .sub { margin-top:9px; font-size:12.5px; color:#C7D2B4; display:flex; align-items:center; gap:7px; }
+.kit .head .sub b { color:var(--lime); font-weight:700; }
+
+.kit .body { padding:20px 16px 110px; }
+.kit .card { background:var(--card); border-radius:18px; box-shadow:var(--shadow); }
+.kit .anim { animation:rise .45s cubic-bezier(.2,.7,.2,1) both; }
+@keyframes rise { from{opacity:0; transform:translateY(10px);} to{opacity:1; transform:none;} }
+
+/* ---- inputs ---- */
+.kit input, .kit select {
+  font-family:inherit; font-size:15px; color:var(--ink);
+  background:#F7FAEF; border:1.5px solid transparent; border-radius:12px;
+  padding:12px 13px; outline:none; width:100%; transition:.18s;
+}
+.kit input::placeholder { color:#A6B196; }
+.kit input:focus, .kit select:focus { border-color:var(--pine); background:#fff; box-shadow:0 0 0 3px rgba(88,123,127,.13); }
+.kit .addbar { display:flex; gap:8px; }
+
+/* ---- buttons ---- */
+.kit .btn { border:none; border-radius:12px; font-family:inherit; font-weight:700; cursor:pointer;
+  display:inline-flex; align-items:center; justify-content:center; gap:7px; transition:transform .08s, filter .15s; }
+.kit .btn:active { transform:scale(.96); }
+.kit .btn-main { background:var(--pine); color:#fff; padding:12px 16px; box-shadow:0 6px 16px -8px rgba(73,106,110,.9); }
+.kit .btn-main:hover { filter:brightness(1.06); }
+.kit .btn-olive { background:var(--olive); color:#fff; box-shadow:0 6px 16px -8px rgba(110,140,90,.9); }
+.kit .btn-ghost { background:transparent; color:#A6B196; padding:6px; }
+.kit .btn-ghost:hover { color:var(--soft); }
+.kit .chips { display:flex; flex-wrap:wrap; gap:8px; }
+.kit .chip { background:#F0F6E3; border:1px solid var(--line); color:var(--char); border-radius:999px;
+  padding:7px 13px 7px 10px; font-family:inherit; font-size:13px; font-weight:600; cursor:pointer;
+  display:inline-flex; align-items:center; gap:4px; transition:.12s; }
+.kit .chip:hover { background:var(--lime); border-color:var(--olive); }
+.kit .chip:active { transform:scale(.95); }
+
+/* dish ingredient editor */
+.kit .dishblk { border:1px solid var(--line); border-radius:14px; padding:12px; margin-bottom:11px; background:#FBFDF6; }
+.kit .uselbl { font-size:11.5px; color:var(--soft); font-weight:600; margin:10px 2px 7px; }
+.kit .userow { display:flex; gap:7px; align-items:center; margin-bottom:7px; }
+.kit .userow select { flex:1; min-width:0; padding:9px 10px; font-size:14px; }
+.kit .userow input { width:62px; padding:9px 8px; font-size:14px; text-align:center; }
+.kit .unit { font-size:12.5px; color:var(--soft); min-width:28px; }
+.kit .addmini { font-size:12.5px; font-weight:700; color:var(--pine); background:none; border:none; cursor:pointer; padding:4px 2px; display:inline-flex; align-items:center; gap:4px; }
+.kit .useline { font-size:12px; color:#C7D2B4; margin-top:4px; }
+
+/* nutrition card */
+.kit .nut { display:flex; gap:16px; align-items:center; padding:18px 20px; margin-top:14px; }
+.kit .nutscore { width:64px; height:64px; border-radius:50%; flex-shrink:0; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#fff; }
+.kit .nutscore .s { font-size:22px; font-weight:700; line-height:1; font-family:'Fraunces',serif; }
+.kit .nutscore .g { font-size:10px; letter-spacing:.1em; opacity:.85; margin-top:2px; }
+.kit .nut .txt { flex:1; }
+.kit .nut .txt .h { font-size:12px; color:var(--soft); font-weight:700; letter-spacing:.04em; margin-bottom:3px; }
+.kit .nut .txt .c { font-size:13.5px; line-height:1.55; }
+.kit .tags3 { display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
+.kit .t3 { font-size:11px; font-weight:700; padding:2px 9px; border-radius:999px; }
+/* nutrient estimate */
+.kit .est { padding:16px 20px 18px; margin-top:12px; }
+.kit .est .row1 { display:flex; align-items:baseline; justify-content:space-between; margin-bottom:12px; }
+.kit .est .kcal { font-family:'Fraunces',serif; font-size:30px; font-weight:700; line-height:1; }
+.kit .est .kcal small { font-size:13px; font-weight:500; color:var(--soft); margin-left:4px; }
+.kit .est .hh { font-size:12px; color:var(--soft); font-weight:700; letter-spacing:.04em; }
+.kit .macrobar { display:flex; height:12px; border-radius:999px; overflow:hidden; background:#EEF2E4; }
+.kit .macrobar > span { display:block; height:100%; }
+.kit .macrolg { display:flex; gap:14px; margin-top:11px; flex-wrap:wrap; }
+.kit .macrolg .m { display:flex; align-items:center; gap:6px; font-size:12.5px; }
+.kit .macrolg .m i { width:10px; height:10px; border-radius:3px; display:inline-block; }
+.kit .macrolg .m b { font-weight:700; }
+.kit .macrolg .m span { color:var(--soft); }
+.kit .disc { font-size:11px; color:var(--soft); margin-top:12px; line-height:1.5; }
+
+/* ---- section title ---- */
+.kit .sec { margin:26px 4px 12px; }
+.kit .sec .k { color:var(--soft); margin-bottom:3px; }
+.kit .sec h2 { font-size:21px; margin:0; font-weight:700; }
+
+/* ---- inventory stats ---- */
+.kit .stats { display:flex; gap:11px; margin-bottom:6px; }
+.kit .stat { flex:1; background:var(--card); border-radius:16px; padding:15px 16px; box-shadow:var(--shadow); }
+.kit .stat .n { font-size:30px; line-height:1; font-weight:600; }
+.kit .stat .l { color:var(--soft); margin-top:7px; }
+.kit .stat.warn .n { color:#C0392B; }
+
+/* ---- category header ---- */
+.kit .cath { display:flex; align-items:center; gap:9px; margin:24px 4px 9px; }
+.kit .cath .em { font-size:17px; }
+.kit .cath .nm { font-weight:700; font-size:15px; }
+.kit .cath .ct { font-size:11px; color:var(--soft); }
+.kit .cath .rule { flex:1; height:1px; background:var(--line); }
+
+/* ---- rows ---- */
+.kit .row { display:flex; align-items:center; gap:12px; padding:14px 15px; border-bottom:1px solid var(--line); }
+.kit .row:last-child { border-bottom:none; }
+.kit .nm { font-weight:600; font-size:15.5px; }
+.kit .qty { color:var(--soft); font-weight:500; margin-left:7px; font-size:13.5px; }
+.kit .pill { display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; margin-top:5px; }
+
+/* ---- shopping ---- */
+.kit .prog { height:7px; border-radius:999px; background:#DCE7C4; overflow:hidden; margin:2px 2px 16px; }
+.kit .prog > i { display:block; height:100%; background:var(--olive); border-radius:999px; transition:width .4s cubic-bezier(.2,.7,.2,1); }
+.kit .chk { width:25px; height:25px; border-radius:9px; border:2px solid #C2CFAA; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; transition:.15s; }
+.kit .chk.on { background:var(--olive); border-color:var(--olive); animation:pop .3s ease; }
+@keyframes pop { 0%{transform:scale(.7);} 55%{transform:scale(1.18);} 100%{transform:scale(1);} }
+
+/* ---- dinner hero / menu ---- */
+.kit .hero { background:linear-gradient(160deg,#2C3127,#3B4633 55%,#46504C);
+  color:#EFF3E4; border-radius:24px; padding:26px 24px 24px; position:relative; overflow:hidden;
+  box-shadow:0 20px 44px -22px rgba(44,49,39,.85); }
+.kit .hero::before{ content:''; position:absolute; left:-50px; bottom:-60px; width:200px; height:200px; border-radius:50%;
+  background:radial-gradient(circle, rgba(207,238,158,.16), transparent 70%); }
+.kit .hero .htop { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:18px; position:relative; }
+.kit .hero .k2 { color:var(--lime); }
+.kit .hero .date2 { font-size:12px; color:#C7D2B4; margin-top:5px; }
+.kit .mitem { display:flex; align-items:baseline; gap:15px; padding:13px 0; border-bottom:1px solid rgba(239,243,228,.14); position:relative; }
+.kit .mitem:last-of-type { border-bottom:none; }
+.kit .midx { font-family:'DM Mono',monospace; font-size:13px; color:var(--lime); flex-shrink:0; padding-top:4px; }
+.kit .mname { font-size:23px; line-height:1.35; font-weight:600; }
+.kit .editb { background:rgba(239,243,228,.14); color:#EFF3E4; padding:6px 12px; font-size:12px; border-radius:999px; }
+
+/* ---- empty ---- */
+.kit .empty { text-align:center; color:var(--soft); padding:30px 24px; }
+.kit .empty .e { font-size:38px; margin-bottom:10px; }
+.kit .empty .et { font-weight:700; color:var(--ink); font-size:16px; margin-bottom:4px; }
+
+/* ---- tabs ---- */
+.kit .tabs { position:fixed; bottom:0; left:0; right:0; max-width:480px; margin:0 auto;
+  display:flex; padding:8px 14px calc(8px + env(safe-area-inset-bottom));
+  background:rgba(255,255,255,.82); backdrop-filter:blur(14px) saturate(1.4);
+  border-top:1px solid var(--line); box-shadow:0 -8px 28px -12px rgba(57,64,50,.22); }
+.kit .tab { flex:1; border:none; background:none; padding:6px 0; cursor:pointer;
+  display:flex; flex-direction:column; align-items:center; gap:5px; color:#A6B196; font-family:inherit; }
+.kit .tab .iw { width:52px; height:30px; border-radius:999px; display:flex; align-items:center; justify-content:center; transition:.22s cubic-bezier(.2,.7,.2,1); }
+.kit .tab.on { color:var(--ink); }
+.kit .tab.on .iw { background:var(--pine); color:#fff; box-shadow:0 6px 14px -6px rgba(73,106,110,.95); }
+.kit .tab .lab { font-size:11px; font-weight:700; }
+`;
+
+function KitchenApp() {
+  const [house, setHouse] = useState(() => localStorage.getItem("kitchen:house") || "");
+  const [tab, setTab] = useState("dinner");
+  const [loading, setLoading] = useState(true);
+  const [inv, setInv] = useState([]);
+  const [shop, setShop] = useState([]);
+  const [dinners, setDinners] = useState([]);
+  const refRef = React.useRef(null);
+
+  // 訂閱雲端資料:全家同一組家庭代碼 = 同一份資料,且即時同步
+  useEffect(() => {
+    if (!house) return;
+    setLoading(true);
+    const ref = db.collection("households").doc(house);
+    refRef.current = ref;
+    const unsub = ref.onSnapshot(
+      (snap) => {
+        const d = snap.data() || {};
+        setInv(d.inventory || []); setShop(d.shopping || []); setDinners(d.dinners || []);
+        setLoading(false);
+      },
+      (err) => { console.error("Firestore 連線錯誤:", err); setLoading(false); }
+    );
+    return () => unsub();
+  }, [house]);
+
+  const write = (patch) => { if (refRef.current) refRef.current.set(patch, { merge: true }).catch((e) => console.error(e)); };
+  const updInv = (v) => { setInv(v); write({ inventory: v }); };
+  const updShop = (v) => { setShop(v); write({ shopping: v }); };
+  const updDin = (v) => { setDinners(v); write({ dinners: v }); };
+  const leaveHouse = () => { localStorage.removeItem("kitchen:house"); setHouse(""); };
+
+  if (!house) {
+    return <HouseholdSetup onJoin={(code) => { localStorage.setItem("kitchen:house", code); setHouse(code); }} />;
+  }
+
+  if (loading) {
+    return (
+      <div className="kit"><style>{CSS}</style>
+        <div className="empty" style={{ paddingTop: 140 }}><div className="e">🍳</div>載入廚房中…</div>
+      </div>
+    );
+  }
+
+  const expiring = inv.filter((i) => { const d = daysLeft(i.exp); return d !== null && d <= 3; }).length;
+  const pending = shop.filter((s) => !s.done).length;
+  const todayDinner = dinners.find((d) => d.date === todayStr());
+
+  const heads = {
+    inv: { title: "食材庫存", sub: <>冰箱裡有 <b>{inv.length}</b> 樣食材{expiring > 0 && <>,<b>{expiring}</b> 樣要快用掉</>}</> },
+    shop: { title: "購物清單", sub: <>還有 <b>{pending}</b> 項要買</> },
+    dinner: { title: `${greet()},今晚吃什麼?`, sub: todayDinner ? <>菜單已公告 · <b>{todayDinner.dishes.length}</b> 道菜</> : <>還沒決定,來排個菜吧</> },
+  };
+
+  return (
+    <div className="kit">
+      <style>{CSS}</style>
+      <header className="head">
+        <div className="top">
+          <span className="kicker"><span className="dot" />我家的廚房 · {house}</span>
+          <button className="kicker" onClick={leaveHouse} style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", opacity: .85, fontFamily: "inherit" }}>切換家庭 ⇄</button>
+        </div>
+        <h1 className="serif">{heads[tab].title}</h1>
+        <div className="sub">{heads[tab].sub}</div>
+      </header>
+      <div className="body" key={tab}>
+        {tab === "inv" && <Inventory inv={inv} setInv={updInv} shop={shop} setShop={updShop} expiring={expiring} />}
+        {tab === "shop" && <Shopping shop={shop} setShop={updShop} inv={inv} setInv={updInv} />}
+        {tab === "dinner" && <Dinner dinners={dinners} setDinners={updDin} inv={inv} setInv={updInv} />}
+      </div>
+      <nav className="tabs">
+        {[
+          { id: "inv", lab: "庫存", Icon: Package },
+          { id: "dinner", lab: "晚餐", Icon: UtensilsCrossed },
+          { id: "shop", lab: "購物", Icon: ShoppingCart },
+        ].map(({ id, lab, Icon }) => (
+          <button key={id} className={`tab ${tab === id ? "on" : ""}`} onClick={() => setTab(id)}>
+            <span className="iw"><Icon size={20} strokeWidth={tab === id ? 2.5 : 2} /></span>
+            <span className="lab">{lab}</span>
+          </button>
+        ))}
+      </nav>
+    </div>
+  );
+}
+
+// ================= 食材庫存 =================
+function Inventory({ inv, setInv, shop, setShop, expiring }) {
+  const [name, setName] = useState("");
+  const [qty, setQty] = useState("");
+  const [cat, setCat] = useState("veg");
+  const [exp, setExp] = useState("");
+
+  const add = () => {
+    if (!name.trim()) return;
+    setInv([...inv, { id: uid(), name: name.trim(), qty: qty.trim(), cat, exp }]);
+    setName(""); setQty(""); setExp("");
+  };
+  const del = (id) => setInv(inv.filter((x) => x.id !== id));
+  const toShop = (it) => {
+    del(it.id);
+    if (!shop.some((s) => s.name === it.name && !s.done))
+      setShop([...shop, { id: uid(), name: it.name, qty: it.qty, done: false }]);
+  };
+
+  const groups = CATS.map((c) => ({ c, items: inv.filter((i) => i.cat === c.id) })).filter((g) => g.items.length);
+  let idx = 0;
+
+  return (
+    <div>
+      <div className="stats anim">
+        <div className="stat"><div className="n serif">{inv.length}</div><div className="l kicker">樣食材</div></div>
+        <div className={`stat ${expiring ? "warn" : ""}`}><div className="n serif">{expiring}</div><div className="l kicker">要快用掉</div></div>
+      </div>
+
+      <div className="sec"><div className="k kicker">Add item</div><h2 className="serif">新增食材</h2></div>
+      <div className="card anim" style={{ padding: 15 }}>
+        <div className="addbar" style={{ marginBottom: 9 }}>
+          <input placeholder="食材名稱(例:雞蛋)" value={name} onChange={(e) => setName(e.target.value)}
+            style={{ flex: 2 }} />
+          <input placeholder="數量" value={qty} onChange={(e) => setQty(e.target.value)}
+            style={{ flex: 1 }} />
+        </div>
+        <div className="addbar">
+          <select value={cat} onChange={(e) => setCat(e.target.value)} style={{ flex: 1 }}>
+            {CATS.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>)}
+          </select>
+          <input type="date" value={exp} onChange={(e) => setExp(e.target.value)} style={{ flex: 1 }} title="到期日" />
+          <button className="btn btn-main" onClick={add}><Plus size={18} /></button>
+        </div>
+        <p style={{ fontSize: 11.5, color: "var(--soft)", margin: "11px 2px 0" }}>到期日可不填,填了會在快過期時提醒你</p>
+      </div>
+
+      {inv.length === 0 && (
+        <div className="empty" style={{ marginTop: 26 }}><div className="e">🧊</div>
+          <div className="et">冰箱還是空的</div>加幾樣食材,開始管理吧!</div>
+      )}
+
+      {groups.map(({ c, items }) => (
+        <div key={c.id}>
+          <div className="cath">
+            <span className="em">{c.emoji}</span>
+            <span className="nm" style={{ color: c.color }}>{c.label}</span>
+            <span className="ct mono">{items.length}</span>
+            <span className="rule" />
+          </div>
+          <div className="card">
+            {items.map((it) => {
+              const d = daysLeft(it.exp);
+              idx++;
+              return (
+                <div className="row anim" key={it.id} style={{ animationDelay: `${idx * 0.03}s` }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div><span className="nm">{it.name}</span>{it.qty && <span className="qty">數量：{it.qty}</span>}</div>
+                    {d !== null && (
+                      <span className="pill" style={{
+                        background: d < 0 ? "#F6DAD3" : d <= 3 ? "#FBEBCB" : "#E1EECB",
+                        color: d < 0 ? "#C0392B" : d <= 3 ? "#9A6A12" : "#5A7A3E",
+                      }}>
+                        {d < 0 ? <><AlertTriangle size={11} /> 已過期 {-d} 天</> : d === 0 ? "今天到期" : d <= 3 ? <><AlertTriangle size={11} /> 剩 {d} 天</> : `剩 ${d} 天`}
+                      </span>
+                    )}
+                  </div>
+                  <button className="btn btn-ghost" title="加入購物清單" onClick={() => toShop(it)} style={{ color: "var(--olive)" }}><ShoppingCart size={18} /></button>
+                  <button className="btn btn-ghost" title="刪除" onClick={() => del(it.id)}><Trash2 size={18} /></button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ================= 購物清單 =================
+function Shopping({ shop, setShop, inv, setInv }) {
+  const [name, setName] = useState("");
+  const [qty, setQty] = useState("");
+
+  const add = () => {
+    if (!name.trim()) return;
+    setShop([...shop, { id: uid(), name: name.trim(), qty: qty.trim(), done: false }]);
+    setName(""); setQty("");
+  };
+  const toggle = (id) => setShop(shop.map((s) => s.id === id ? { ...s, done: !s.done } : s));
+  const del = (id) => setShop(shop.filter((s) => s.id !== id));
+
+  const doneItems = shop.filter((s) => s.done);
+  const moveBought = () => {
+    const adds = doneItems.map((s) => ({ id: uid(), name: s.name, qty: s.qty, cat: "etc", exp: "" }));
+    setInv([...inv, ...adds]);
+    setShop(shop.filter((s) => !s.done));
+  };
+
+  const sorted = [...shop].sort((a, b) => a.done - b.done);
+  const pct = shop.length ? Math.round((doneItems.length / shop.length) * 100) : 0;
+
+  return (
+    <div>
+      <div className="card anim" style={{ padding: 15, marginBottom: 18 }}>
+        <div className="addbar">
+          <input placeholder="要買的東西" value={name} onChange={(e) => setName(e.target.value)}
+            style={{ flex: 2 }} />
+          <input placeholder="數量" value={qty} onChange={(e) => setQty(e.target.value)}
+            style={{ flex: 1 }} />
+          <button className="btn btn-main" onClick={add}><Plus size={18} /></button>
+        </div>
+      </div>
+
+      {shop.length === 0 && (
+        <div className="empty"><div className="e">🛒</div>
+          <div className="et">清單是空的</div>想到要買什麼,隨手加進來</div>
+      )}
+
+      {shop.length > 0 && (
+        <>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", margin: "0 2px 8px" }}>
+            <span className="kicker" style={{ color: "var(--soft)" }}>採買進度</span>
+            <span className="mono" style={{ fontSize: 12, color: "var(--soft)" }}>{doneItems.length} / {shop.length}</span>
+          </div>
+          <div className="prog"><i style={{ width: `${pct}%` }} /></div>
+
+          <div className="card">
+            {sorted.map((s, i) => (
+              <div className="row anim" key={s.id} style={{ animationDelay: `${i * 0.03}s` }}>
+                <div className={`chk ${s.done ? "on" : ""}`} onClick={() => toggle(s.id)}>{s.done && <Check size={16} color="#fff" strokeWidth={3} />}</div>
+                <div style={{ flex: 1, opacity: s.done ? 0.4 : 1, textDecoration: s.done ? "line-through" : "none" }}>
+                  <span className="nm">{s.name}</span>{s.qty && <span className="qty">數量：{s.qty}</span>}
+                </div>
+                <button className="btn btn-ghost" onClick={() => del(s.id)}><X size={18} /></button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {doneItems.length > 0 && (
+        <button className="btn btn-olive" onClick={moveBought} style={{ width: "100%", marginTop: 16, padding: 14 }}>
+          <Check size={18} /> 把已買的 {doneItems.length} 項移入庫存 <ArrowRight size={16} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ================= 今日晚餐 =================
+function Dinner({ dinners, setDinners, inv, setInv }) {
+  const today = todayStr();
+  const todayEntry = dinners.find((d) => d.date === today);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState([{ name: "", uses: [] }]);
+
+  // 收集過去公告過的菜名(常煮排前面),並記住每道菜最近一次用過的食材
+  const freq = {};
+  const lastUses = {};
+  dinners.forEach((d) => (d.dishes || []).forEach((dish) => {
+    const nm = dishName(dish);
+    freq[nm] = (freq[nm] || 0) + 1;
+    if (!lastUses[nm] && dishUses(dish).length) lastUses[nm] = dishUses(dish);
+  }));
+  const known = Object.keys(freq).sort((a, b) => freq[b] - freq[a]);
+
+  const clone = (arr) => arr.map((x) => ({ ...x, uses: x.uses.map((u) => ({ ...u })) }));
+
+  const startEdit = () => {
+    const base = todayEntry ? todayEntry.dishes.map((d) => ({ name: dishName(d), uses: dishUses(d).map((u) => ({ ...u })) })) : [];
+    setDraft([...base, { name: "", uses: [] }]);
+    setEditing(true);
+  };
+  const setDishName = (i, v) => {
+    const next = clone(draft); next[i].name = v;
+    if (i === next.length - 1 && v.trim()) next.push({ name: "", uses: [] });
+    setDraft(next);
+  };
+  const rmDish = (i) => { const n = draft.filter((_, x) => x !== i); setDraft(n.length ? n : [{ name: "", uses: [] }]); };
+  const addQuick = (name) => {
+    const filled = draft.filter((d) => d.name.trim());
+    if (filled.some((d) => d.name.trim() === name)) return;
+    setDraft([...filled, { name, uses: (lastUses[name] || []).map((u) => ({ ...u })) }, { name: "", uses: [] }]);
+  };
+  const addUse = (i) => { const n = clone(draft); n[i].uses.push({ invId: "", name: "", unit: "", cat: "", amount: "" }); setDraft(n); };
+  const setUse = (i, j, invId) => {
+    const n = clone(draft); const it = inv.find((x) => x.id === invId);
+    const unit = it ? parseAmount(it.qty).unit : "";
+    n[i].uses[j] = { ...n[i].uses[j], invId, name: it ? it.name : "", unit, cat: it ? it.cat : "" };
+    setDraft(n);
+  };
+  const setUseAmt = (i, j, v) => { const n = clone(draft); n[i].uses[j].amount = v; setDraft(n); };
+  const rmUse = (i, j) => { const n = clone(draft); n[i].uses.splice(j, 1); setDraft(n); };
+
+  const save = () => {
+    const dishes = draft.filter((d) => d.name.trim()).map((d) => ({
+      name: d.name.trim(),
+      uses: d.uses.filter((u) => u.invId)
+        .map((u) => ({ invId: u.invId, name: u.name, unit: u.unit, cat: u.cat, amount: parseFloat(u.amount) > 0 ? parseFloat(u.amount) : null })),
+    }));
+    const others = dinners.filter((d) => d.date !== today);
+    if (dishes.length === 0) { setDinners(others); setEditing(false); return; }
+
+    // 依使用量從庫存扣除;沒填量或庫存無數字(視為無限)則不扣;扣到 0 的食材移除
+    const newInv = inv.map((it) => ({ ...it }));
+    const usedIds = new Set();
+    dishes.forEach((d) => d.uses.forEach((u) => {
+      if (!(u.amount > 0)) return; // 沒填數量 → 不扣
+      const it = newInv.find((x) => x.id === u.invId);
+      if (!it) return;
+      const { num, unit } = parseAmount(it.qty);
+      if (num === null) return; // 庫存沒寫數量 → 視為無限,不扣
+      usedIds.add(it.id);
+      const left = Math.max(0, num - u.amount);
+      it.qty = left <= 0 ? "0" : `${fmtNum(left)} ${unit}`.trim();
+    }));
+    setInv(newInv.filter((it) => !(usedIds.has(it.id) && parseAmount(it.qty).num === 0)));
+
+    setDinners([{ date: today, dishes }, ...others].sort((a, b) => b.date.localeCompare(a.date)));
+    setEditing(false);
+  };
+
+  const history = dinners.filter((d) => d.date !== today).slice(0, 14);
+  const nut = todayEntry ? nutrition(todayEntry.dishes) : null;
+  const est = todayEntry ? estimateNutrients(todayEntry.dishes) : null;
+
+  if (editing) {
+    const inDraft = draft.map((x) => x.name.trim());
+    const quick = known.filter((n) => !inDraft.includes(n)).slice(0, 14);
+    return (
+      <div>
+        <div className="sec" style={{ marginTop: 4 }}><div className="k kicker">Tonight's menu</div><h2 className="serif">設定今晚菜色</h2></div>
+
+        {known.length > 0 && (
+          <div style={{ marginBottom: 14 }}>
+            <div className="kicker" style={{ color: "var(--soft)", margin: "0 2px 9px" }}>常用菜色 · 點一下加入</div>
+            {quick.length > 0 ? (
+              <div className="chips">
+                {quick.map((n) => (
+                  <button key={n} className="chip" onClick={() => addQuick(n)}><Plus size={12} /> {n}</button>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: 12.5, color: "var(--soft)", margin: "0 2px" }}>常用菜色都加進來囉</div>
+            )}
+          </div>
+        )}
+
+        <datalist id="dish-options">
+          {known.map((n) => <option key={n} value={n} />)}
+        </datalist>
+
+        {draft.map((d, i) => {
+          const isLast = i === draft.length - 1;
+          if (!d.name.trim() && isLast) {
+            return (
+              <div key={i} className="card" style={{ padding: 13, marginBottom: 4 }}>
+                <div className="addbar" style={{ alignItems: "center", marginBottom: 0 }}>
+                  <span className="midx" style={{ color: "var(--soft)", paddingTop: 0 }}>{String(i + 1).padStart(2, "0")}</span>
+                  <input list="dish-options" placeholder="輸入或從清單選一道菜…" value={d.name}
+                    onChange={(e) => setDishName(i, e.target.value)} style={{ flex: 1 }} />
+                </div>
+              </div>
+            );
+          }
+          return (
+            <div key={i} className="dishblk anim">
+              <div className="addbar" style={{ alignItems: "center", marginBottom: 0 }}>
+                <span className="midx" style={{ color: "var(--soft)", paddingTop: 0 }}>{String(i + 1).padStart(2, "0")}</span>
+                <input list="dish-options" placeholder="菜名" value={d.name}
+                  onChange={(e) => setDishName(i, e.target.value)} style={{ flex: 1 }} />
+                <button className="btn btn-ghost" onClick={() => rmDish(i)}><X size={18} /></button>
+              </div>
+              <div className="uselbl">使用食材(公告後會從庫存扣除)</div>
+              {d.uses.map((u, j) => (
+                <div className="userow" key={j}>
+                  <select value={u.invId} onChange={(e) => setUse(i, j, e.target.value)}>
+                    <option value="">選擇庫存食材…</option>
+                    {inv.map((it) => <option key={it.id} value={it.id}>{it.name}{it.qty ? `(${it.qty})` : ""}</option>)}
+                  </select>
+                  <input type="number" min="0" step="0.5" placeholder="量(可空)" value={u.amount}
+                    onChange={(e) => setUseAmt(i, j, e.target.value)} />
+                  <span className="unit">{u.unit}</span>
+                  <button className="btn btn-ghost" onClick={() => rmUse(i, j)} style={{ padding: 4 }}><X size={16} /></button>
+                </div>
+              ))}
+              {inv.length === 0
+                ? <div style={{ fontSize: 11.5, color: "var(--soft)", marginTop: 2 }}>庫存還沒有食材,可先到「庫存」分頁新增</div>
+                : <button className="addmini" onClick={() => addUse(i)}><Plus size={13} /> 加入食材</button>}
+            </div>
+          );
+        })}
+        <p style={{ fontSize: 11.5, color: "var(--soft)", margin: "10px 2px 0", lineHeight: 1.6 }}>菜名可打字或從下拉選單選;數量可不填——不填或庫存沒寫數量(如義大利麵)就視為無限、公告後不扣庫存。</p>
+
+        <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+          <button className="btn" onClick={() => setEditing(false)} style={{ flex: 1, padding: 14, background: "#DCE7C4", color: "var(--ink)" }}>取消</button>
+          <button className="btn btn-main" onClick={save} style={{ flex: 2, padding: 14 }}><Check size={18} /> 公告今晚菜色</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {todayEntry ? (
+        <>
+          <div className="hero anim">
+            <div className="htop">
+              <div>
+                <div className="kicker k2">📣 今晚菜單 · Tonight</div>
+                <div className="date2 mono">{fmtDate(today)}</div>
+              </div>
+              <button className="btn editb" onClick={startEdit}><Pencil size={13} /> 修改</button>
+            </div>
+            {todayEntry.dishes.map((d, i) => (
+              <div className="mitem" key={i}>
+                <span className="midx">{String(i + 1).padStart(2, "0")}</span>
+                <div>
+                  <div className="mname serif">{dishName(d)}</div>
+                  {dishUses(d).length > 0 && (
+                    <div className="useline">{dishUses(d).map((u) => u.amount > 0 ? `${u.name} ${fmtNum(u.amount)}${u.unit}` : u.name).join(" · ")}</div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {nut ? (
+            <>
+            <div className="card nut anim">
+              <div className="nutscore" style={{ background: gradeColor(nut.grade) }}>
+                <span className="s">{nut.score}</span>
+                <span className="g">{nut.grade} 級</span>
+              </div>
+              <div className="txt">
+                <div className="h">今晚營養評分</div>
+                <div className="c">{nut.comment}</div>
+                <div className="tags3">
+                  {[["蔬菜", nut.hasVeg], ["蛋白質", nut.hasProt], ["主食", nut.hasStap]].map(([lab, on]) => (
+                    <span key={lab} className="t3" style={on
+                      ? { background: "#E1EECB", color: "#4F7A4A" }
+                      : { background: "#EFEFE9", color: "#B7BCAE" }}>{on ? "✓ " : "– "}{lab}</span>
+                  ))}
+                </div>
+              </div>
+            </div>
+            {est && (
+              <div className="card est anim">
+                <div className="row1">
+                  <div className="kcal">{est.kcal}<small>kcal(估算)</small></div>
+                  <div className="hh">三大營養素</div>
+                </div>
+                {(() => {
+                  const pc = est.p * 4, cc = est.c * 4, fc = est.f * 9, tot = pc + cc + fc || 1;
+                  const w = (x) => `${Math.round((x / tot) * 100)}%`;
+                  return (
+                    <>
+                      <div className="macrobar">
+                        <span style={{ width: w(pc), background: "#587B7F" }} />
+                        <span style={{ width: w(cc), background: "#C9A22A" }} />
+                        <span style={{ width: w(fc), background: "#C0612A" }} />
+                      </div>
+                      <div className="macrolg">
+                        <div className="m"><i style={{ background: "#587B7F" }} /><b>蛋白質</b> <span>{est.p}g</span></div>
+                        <div className="m"><i style={{ background: "#C9A22A" }} /><b>碳水</b> <span>{est.c}g</span></div>
+                        <div className="m"><i style={{ background: "#C0612A" }} /><b>脂肪</b> <span>{est.f}g</span></div>
+                      </div>
+                    </>
+                  );
+                })()}
+                <div className="disc">※ 整桌概略估算:依常見食材每 100 克平均值與份量推估;份量非公克時以每份約 100g 計。僅供參考,非精確營養標示。</div>
+              </div>
+            )}
+            </>
+          ) : (
+            <div className="card anim" style={{ padding: "16px 18px", marginTop: 14, display: "flex", gap: 13, alignItems: "center" }}>
+              <div style={{ fontSize: 26 }}>🥗</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>還沒有營養評分</div>
+                <div style={{ fontSize: 12.5, color: "var(--soft)", lineHeight: 1.5 }}>幫每道菜加上「使用食材」就會自動算出評分與評語</div>
+              </div>
+              <button className="btn btn-main" onClick={startEdit} style={{ padding: "9px 13px", fontSize: 13, flexShrink: 0 }}><Plus size={15} /> 加食材</button>
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="card anim" style={{ padding: 30, textAlign: "center" }}>
+          <div style={{ fontSize: 40, marginBottom: 10 }}>🍽️</div>
+          <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 5 }}>今晚還沒決定吃什麼</div>
+          <div className="mono" style={{ fontSize: 12.5, color: "var(--soft)", marginBottom: 20 }}>{fmtDate(today)}</div>
+          <button className="btn btn-main" onClick={startEdit} style={{ padding: "13px 24px" }}><Plus size={18} /> 公告今晚菜色</button>
+        </div>
+      )}
+
+      {history.length > 0 && (
+        <>
+          <div className="sec"><div className="k kicker">Recently cooked</div><h2 className="serif" style={{ fontSize: 18 }}>近期菜單</h2></div>
+          <div className="card">
+            {history.map((d, i) => (
+              <div className="row anim" key={i} style={{ alignItems: "flex-start", animationDelay: `${i * 0.03}s` }}>
+                <div className="mono" style={{ minWidth: 50, fontSize: 12.5, color: "var(--pine)", fontWeight: 500, paddingTop: 1 }}>
+                  {shortDate(d.date)}
+                </div>
+                <div style={{ flex: 1, fontSize: 14.5 }}>
+                  {d.dishes.map(dishName).join("、")}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+
+// ====== 家庭代碼設定畫面 ======
+function HouseholdSetup({ onJoin }) {
+  const [code, setCode] = useState("");
+  const go = () => { const c = code.trim(); if (c) onJoin(c); };
+  return (
+    <div className="kit"><style>{CSS}</style>
+      <header className="head">
+        <div className="top"><span className="kicker"><span className="dot" />我家的廚房 · OUR KITCHEN</span></div>
+        <h1 className="serif">設定家庭代碼</h1>
+        <div className="sub">全家輸入<b style={{color:"var(--lime)"}}>同一組代碼</b>,就能共用同一份資料</div>
+      </header>
+      <div className="body" style={{ paddingBottom: 30 }}>
+        <div className="card" style={{ padding: 18 }}>
+          <div className="kicker" style={{ color: "var(--soft)", marginBottom: 9 }}>家庭代碼</div>
+          <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="例如:lin-family-8821"
+            onKeyDown={(e) => e.key === "Enter" && go()} />
+          <p style={{ fontSize: 12.5, color: "var(--soft)", lineHeight: 1.7, marginTop: 11 }}>
+            自訂一組<b>不容易被猜到</b>的代碼(建議混入數字)。家人各自在手機打開這個網站、輸入<b>同一組代碼</b>,就會看到同一份冰箱、清單與菜單,而且即時同步。
+          </p>
+          <button className="btn btn-main" onClick={go} style={{ width: "100%", padding: 14, marginTop: 4 }}>
+            <Check size={18} /> 開始使用
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+ReactDOM.createRoot(document.getElementById("root")).render(<KitchenApp />);
+
+  </script>
+</body>
+</html>
