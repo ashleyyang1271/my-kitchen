@@ -560,10 +560,16 @@ function Shopping({ shop, setShop, inv, setInv }) {
   const doneItems = shop.filter((s) => s.done);
   const [confirming, setConfirming] = useState(false);
   const [sel, setSel] = useState({});
-  const openConfirm = () => { const init = {}; doneItems.forEach((s) => { init[s.id] = true; }); setSel(init); setConfirming(true); };
+  const [cats, setCats] = useState({});
+  const openConfirm = () => {
+    const init = {}, ic = {};
+    doneItems.forEach((s) => { init[s.id] = true; ic[s.id] = "etc"; });
+    setSel(init); setCats(ic); setConfirming(true);
+  };
   const toggleSel = (id) => setSel((p) => ({ ...p, [id]: !p[id] }));
+  const setCat = (id, c) => setCats((p) => ({ ...p, [id]: c }));
   const confirmMove = () => {
-    const adds = doneItems.filter((s) => sel[s.id]).map((s) => ({ id: uid(), name: s.name, qty: s.qty, cat: "etc", exp: "" }));
+    const adds = doneItems.filter((s) => sel[s.id]).map((s) => ({ id: uid(), name: s.name, qty: s.qty, cat: cats[s.id] || "etc", exp: "" }));
     if (adds.length) setInv([...inv, ...adds]);
     setShop(shop.filter((s) => !s.done));
     setConfirming(false);
@@ -619,12 +625,18 @@ function Shopping({ shop, setShop, inv, setInv }) {
 
       {confirming && (
         <div className="card anim" style={{ marginTop: 16, padding: 15 }}>
-          <div className="kicker" style={{ color: "var(--soft)", marginBottom: 4 }}>勾選要加入庫存的食材</div>
+          <div className="kicker" style={{ color: "var(--soft)", marginBottom: 4 }}>勾選要入庫的食材,並選擇分類</div>
           <div style={{ fontSize: 11.5, color: "var(--soft)", marginBottom: 8, lineHeight: 1.5 }}>未勾選的不會加入庫存,但都會從購物清單移除</div>
           {doneItems.map((s) => (
-            <div key={s.id} className="row" style={{ padding: "11px 2px", cursor: "pointer" }} onClick={() => toggleSel(s.id)}>
-              <div className={`chk ${sel[s.id] ? "on" : ""}`}>{sel[s.id] && <Check size={16} color="#fff" strokeWidth={3} />}</div>
-              <div style={{ flex: 1 }}><span className="nm">{s.name}</span>{s.qty && <span className="qty">數量：{s.qty}</span>}</div>
+            <div key={s.id} className="row" style={{ padding: "11px 2px", gap: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0, cursor: "pointer" }} onClick={() => toggleSel(s.id)}>
+                <div className={`chk ${sel[s.id] ? "on" : ""}`}>{sel[s.id] && <Check size={16} color="#fff" strokeWidth={3} />}</div>
+                <div style={{ minWidth: 0, opacity: sel[s.id] ? 1 : 0.45 }}><span className="nm">{s.name}</span>{s.qty && <span className="qty">數量：{s.qty}</span>}</div>
+              </div>
+              <select value={cats[s.id] || "etc"} onChange={(e) => setCat(s.id, e.target.value)} disabled={!sel[s.id]}
+                style={{ width: 108, flexShrink: 0, padding: "8px 8px", fontSize: 16, opacity: sel[s.id] ? 1 : 0.5 }}>
+                {CATS.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>)}
+              </select>
             </div>
           ))}
           <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
