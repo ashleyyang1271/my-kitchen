@@ -444,10 +444,14 @@ function Inventory({ inv, setInv, shop, setShop, expiring }) {
     setName(""); setQty(""); setExp("");
   };
   const del = (id) => setInv(inv.filter((x) => x.id !== id));
-  const toShop = (it) => {
-    del(it.id);
-    if (!shop.some((s) => s.name === it.name && !s.done))
-      setShop([...shop, { id: uid(), name: it.name, qty: it.qty, done: false }]);
+  const [editId, setEditId] = useState(null);
+  const [ed, setEd] = useState({ name: "", qty: "", cat: "veg", exp: "" });
+  const startEdit = (it) => { setEditId(it.id); setEd({ name: it.name, qty: it.qty || "", cat: it.cat, exp: it.exp || "" }); };
+  const cancelEdit = () => setEditId(null);
+  const saveEdit = () => {
+    if (!ed.name.trim()) return;
+    setInv(inv.map((x) => x.id === editId ? { ...x, name: ed.name.trim(), qty: ed.qty.trim(), cat: ed.cat, exp: ed.exp } : x));
+    setEditId(null);
   };
 
   const groups = CATS.map((c) => ({ c, items: inv.filter((i) => i.cat === c.id) })).filter((g) => g.items.length);
@@ -495,6 +499,26 @@ function Inventory({ inv, setInv, shop, setShop, expiring }) {
             {items.map((it) => {
               const d = daysLeft(it.exp);
               idx++;
+              if (editId === it.id) {
+                return (
+                  <div className="row anim" key={it.id} style={{ flexDirection: "column", alignItems: "stretch", gap: 8 }}>
+                    <div className="addbar">
+                      <input value={ed.name} onChange={(e) => setEd({ ...ed, name: e.target.value })} placeholder="名稱" style={{ flex: 2 }} />
+                      <input value={ed.qty} onChange={(e) => setEd({ ...ed, qty: e.target.value })} placeholder="數量" style={{ flex: 1 }} />
+                    </div>
+                    <div className="addbar">
+                      <select value={ed.cat} onChange={(e) => setEd({ ...ed, cat: e.target.value })} style={{ flex: 1 }}>
+                        {CATS.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>)}
+                      </select>
+                      <input type="date" value={ed.exp} onChange={(e) => setEd({ ...ed, exp: e.target.value })} style={{ flex: 1 }} />
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button className="btn" onClick={cancelEdit} style={{ flex: 1, padding: 10, background: "#DCE7C4", color: "var(--ink)" }}>取消</button>
+                      <button className="btn btn-main" onClick={saveEdit} style={{ flex: 1, padding: 10 }}><Check size={16} /> 儲存</button>
+                    </div>
+                  </div>
+                );
+              }
               return (
                 <div className="row anim" key={it.id} style={{ animationDelay: `${idx * 0.03}s` }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -508,7 +532,7 @@ function Inventory({ inv, setInv, shop, setShop, expiring }) {
                       </span>
                     )}
                   </div>
-                  <button className="btn btn-ghost" title="加入購物清單" onClick={() => toShop(it)} style={{ color: "var(--olive)" }}><ShoppingCart size={18} /></button>
+                  <button className="btn btn-ghost" title="編輯" onClick={() => startEdit(it)} style={{ color: "var(--pine)" }}><Pencil size={18} /></button>
                   <button className="btn btn-ghost" title="刪除" onClick={() => del(it.id)}><Trash2 size={18} /></button>
                 </div>
               );
@@ -534,10 +558,15 @@ function Shopping({ shop, setShop, inv, setInv }) {
   const del = (id) => setShop(shop.filter((s) => s.id !== id));
 
   const doneItems = shop.filter((s) => s.done);
-  const moveBought = () => {
-    const adds = doneItems.map((s) => ({ id: uid(), name: s.name, qty: s.qty, cat: "etc", exp: "" }));
-    setInv([...inv, ...adds]);
+  const [confirming, setConfirming] = useState(false);
+  const [sel, setSel] = useState({});
+  const openConfirm = () => { const init = {}; doneItems.forEach((s) => { init[s.id] = true; }); setSel(init); setConfirming(true); };
+  const toggleSel = (id) => setSel((p) => ({ ...p, [id]: !p[id] }));
+  const confirmMove = () => {
+    const adds = doneItems.filter((s) => sel[s.id]).map((s) => ({ id: uid(), name: s.name, qty: s.qty, cat: "etc", exp: "" }));
+    if (adds.length) setInv([...inv, ...adds]);
     setShop(shop.filter((s) => !s.done));
+    setConfirming(false);
   };
 
   const sorted = [...shop].sort((a, b) => a.done - b.done);
@@ -582,10 +611,27 @@ function Shopping({ shop, setShop, inv, setInv }) {
         </>
       )}
 
-      {doneItems.length > 0 && (
-        <button className="btn btn-olive" onClick={moveBought} style={{ width: "100%", marginTop: 16, padding: 14 }}>
-          <Check size={18} /> 把已買的 {doneItems.length} 項移入庫存 <ArrowRight size={16} />
+      {doneItems.length > 0 && !confirming && (
+        <button className="btn btn-olive" onClick={openConfirm} style={{ width: "100%", marginTop: 16, padding: 14 }}>
+          <Check size={18} /> 已買的 {doneItems.length} 項 → 加入庫存 <ArrowRight size={16} />
         </button>
+      )}
+
+      {confirming && (
+        <div className="card anim" style={{ marginTop: 16, padding: 15 }}>
+          <div className="kicker" style={{ color: "var(--soft)", marginBottom: 4 }}>勾選要加入庫存的食材</div>
+          <div style={{ fontSize: 11.5, color: "var(--soft)", marginBottom: 8, lineHeight: 1.5 }}>未勾選的不會加入庫存,但都會從購物清單移除</div>
+          {doneItems.map((s) => (
+            <div key={s.id} className="row" style={{ padding: "11px 2px", cursor: "pointer" }} onClick={() => toggleSel(s.id)}>
+              <div className={`chk ${sel[s.id] ? "on" : ""}`}>{sel[s.id] && <Check size={16} color="#fff" strokeWidth={3} />}</div>
+              <div style={{ flex: 1 }}><span className="nm">{s.name}</span>{s.qty && <span className="qty">數量：{s.qty}</span>}</div>
+            </div>
+          ))}
+          <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+            <button className="btn" onClick={() => setConfirming(false)} style={{ flex: 1, padding: 13, background: "#DCE7C4", color: "var(--ink)" }}>取消</button>
+            <button className="btn btn-olive" onClick={confirmMove} style={{ flex: 2, padding: 13 }}><Check size={18} /> 確認加入({doneItems.filter((s) => sel[s.id]).length})</button>
+          </div>
+        </div>
       )}
     </div>
   );
